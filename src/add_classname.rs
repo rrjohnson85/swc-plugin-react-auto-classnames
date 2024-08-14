@@ -65,7 +65,7 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
             _ => return,
         };
 
-        if component_name.contains("Fragment") {
+        if component_name.contains("Fragment") || component_name.ends_with("Provider") {
             return;
         }
 
@@ -99,7 +99,7 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
         });
 
         if !has_class_name {
-            n.attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
+            n.attrs.insert(0, JSXAttrOrSpread::JSXAttr(JSXAttr {
                 span: DUMMY_SP,
                 name: JSXAttrName::Ident(Ident::new(js_word!("className"), DUMMY_SP)),
                 value: Some(JSXAttrValue::Lit(Lit::Str(Str {
