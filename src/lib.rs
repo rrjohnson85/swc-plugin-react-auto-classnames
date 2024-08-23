@@ -130,7 +130,6 @@ mod test {
         r#"
           export const LoginTextField = (props: TextFieldProps) =>
             <TextField
-              className="file-name-text-field"
               variant="outlined"
               role="presentation"
               focused
@@ -141,6 +140,7 @@ mod test {
                 style: { fontSize: "20px", ...props.InputProps?.style || {} },
                 ...props.InputProps || {},
               }}
+              className={`file-name-text-field ${props.className}`}
             />;
         "#
     );
@@ -257,7 +257,6 @@ mod test {
               }}
             >
               <AgGridReact
-                className="file-name-ag-grid-react"
                 defaultColDef={{
                   sortable: true,
                   wrapHeaderText: true,
@@ -273,6 +272,7 @@ mod test {
                   ids.current ? ids.current.includes(node.data.id) : true
                 }
                 {...gridProps}
+                className={`file-name-ag-grid-react ${gridProps.className}`}
               />
             </div>
           </>;
@@ -313,7 +313,7 @@ mod test {
         /* Output */
         r#"
           export const TextFieldComponent = (props: TextFieldProps) =>
-            <TextField className="file-name-text-field" {...props} />;
+            <TextField {...props} className={`file-name-text-field ${props.className}`} />;
         "#
     );
 
