@@ -40,6 +40,8 @@ mod test {
     });
 
     fn runner(_: &mut Tester) -> impl Fold {
+        std::env::set_var("DEBUG", "true");
+
         chain!(
             resolver(Mark::new(), Mark::new(), false),
             as_folder(super::AddClassnameVisitor::new("lib/File_Name.tsx"))
@@ -76,7 +78,7 @@ mod test {
           export const LoginTextField = (props: TextFieldProps) => {
             const [filename, setFilename] = useState("file.txt");
 
-            return <TextField id={{filename}} className="file-name-text-field" />;
+            return <TextField className="file-name-text-field" id={{filename}} />;
           };
         "#
     );
@@ -98,7 +100,7 @@ mod test {
           export const LoginTextField = (props: TextFieldProps) => {
             const [filename, setFilename] = useState("file.txt");
 
-            return <TextField className="no-print file-name-text-field" id={{filename}} />;
+            return <TextField className="file-name-text-field no-print" id={{filename}} />;
           };
         "#
     );
@@ -138,7 +140,7 @@ mod test {
                 style: { fontSize: "20px", ...props.InputProps?.style || {} },
                 ...props.InputProps || {},
               }}
-              className="file-name-text-field"
+              className={`file-name-text-field ${props.className}`}
             />;
         "#
     );
@@ -149,40 +151,40 @@ mod test {
         /* Name */ complex_with_classname,
         /* Input */
         r#"
-          export const LoginTextField = (props: TextFieldProps) => (
-            <TextField
-              variant="outlined"
-              className="no-print"
-              role="presentation"
-              focused
-              color="secondary"
-              {...props}
-              style={{ margin: "1em 0", width: "100%", ...(props.style || {}) }}
-              InputProps={{
-                style: { fontSize: "20px", ...(props.InputProps?.style || {}) },
-                ...(props.InputProps || {}),
-              }}
+        export const LoginTextField = (props: TextFieldProps) => (
+          <TextField
+            variant="outlined"
+            className="no-print"
+            role="presentation"
+            focused
+            color="secondary"
+            {...props}
+            style={{ margin: "1em 0", width: "100%", ...(props.style || {}) }}
+            InputProps={{
+              style: { fontSize: "20px", ...(props.InputProps?.style || {}) },
+              ...(props.InputProps || {}),
+            }}
 
-            />
-          );
-        "#,
+          />
+        );
+      "#,
         /* Output */
         r#"
-          export const LoginTextField = (props: TextFieldProps) =>
-            <TextField
-              variant="outlined"
-              className="no-print file-name-text-field"
-              role="presentation"
-              focused
-              color="secondary"
-              {...props}
-              style={{ margin: "1em 0", width: "100%", ...props.style || {} }}
-              InputProps={{
-                style: { fontSize: "20px", ...props.InputProps?.style || {} },
-                ...props.InputProps || {},
-              }}
-            />;
-        "#
+        export const LoginTextField = (props: TextFieldProps) =>
+          <TextField
+            variant="outlined"
+            className="file-name-text-field no-print"
+            role="presentation"
+            focused
+            color="secondary"
+            {...props}
+            style={{ margin: "1em 0", width: "100%", ...props.style || {} }}
+            InputProps={{
+              style: { fontSize: "20px", ...props.InputProps?.style || {} },
+              ...props.InputProps || {},
+            }}
+          />;
+      "#
     );
 
     test_inline!(
@@ -197,8 +199,7 @@ mod test {
               {props.children}
             </GridApiRefContext.Provider>
             <div
-              className={`
-                ag-theme-alpine
+              className={`ag-theme-alpine
                 ${
                   gridProps.onRowClicked || gridProps.onRowSelected
                     ? "clickable-rows"
@@ -232,17 +233,16 @@ mod test {
             </div>
           </>
         );
-      "#,
+        "#,
         /* Output */
         r#"
         export const GridComponent = (props: TextFieldProps) =>
           <>
-            <GridApiRefContext.Provider value={gridApiRef} className="file-name-provider">
+            <GridApiRefContext.Provider value={gridApiRef}>
               {props.children}
             </GridApiRefContext.Provider>
             <div
-              className={`
-                ag-theme-alpine
+              className={`file-name-div ag-theme-alpine
                 ${
                   gridProps.onRowClicked || gridProps.onRowSelected
                     ? "clickable-rows"
@@ -272,7 +272,7 @@ mod test {
                   ids.current ? ids.current.includes(node.data.id) : true
                 }
                 {...gridProps}
-                className="file-name-ag-grid-react"
+                className={`file-name-ag-grid-react ${gridProps.className}`}
               />
             </div>
           </>;
@@ -303,22 +303,94 @@ mod test {
     test_inline!(
         SYNTAX,
         runner,
-        /* Name */ fragment_literal_no_classname,
+        /* Name */ splat_props_no_explicit_classname,
         /* Input */
         r#"
-          export const GridComponent = (props: TextFieldProps) => (
-            <Fragment>
-              Some text for this fragment
-            </Fragment>
+          export const TextFieldComponent = (props: TextFieldProps) => (
+            <TextField {...props} />
           );
         "#,
         /* Output */
         r#"
-          export const GridComponent = (props: TextFieldProps) =>
-            <Fragment>
-              Some text for this fragment
-            </Fragment>;
-          "#
+          export const TextFieldComponent = (props: TextFieldProps) =>
+            <TextField {...props} className={`file-name-text-field ${props.className}`} />;
+        "#
+    );
+
+    test_inline!(
+      SYNTAX,
+      runner,
+      /* Name */ splat_props_explicit_classname,
+      /* Input */
+      r#"
+        export const TextFieldComponent = (props: TextFieldProps) => (
+          <TextField {...props} className="no-print" />
+        );
+      "#,
+      /* Output */
+      r#"
+        export const TextFieldComponent = (props: TextFieldProps) =>
+          <TextField {...props} className="file-name-text-field no-print" />;
+      "#
+    );
+
+    test_inline!(
+      SYNTAX,
+      runner,
+      /* Name */ splat_with_expr_classname,
+      /* Input */
+      r#"
+        export const TextFieldComponent = (props: TextFieldProps) => (
+          <TextField {...props} className={`complex-${value}`} />
+        );
+      "#,
+      /* Output */
+      r#"
+        export const TextFieldComponent = (props: TextFieldProps) =>
+          <TextField {...props} className={`file-name-text-field complex-${value}`} />;
+      "#
+    );
+
+    test_inline!(
+        SYNTAX,
+        runner,
+        /* Name */ theme_provider_doesnt_get_classname,
+        /* Input */
+        r#"
+        export const GridComponent = (props: TextFieldProps) => (
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        );
+      "#,
+        /* Output */
+        r#"
+        export const GridComponent = (props: TextFieldProps) =>
+          <ThemeProvider>
+            <App className="file-name-app"/>
+          </ThemeProvider>;
+      "#
+    );
+
+    test_inline!(
+        SYNTAX,
+        runner,
+        /* Name */ fragment_literal_no_classname,
+        /* Input */
+        r#"
+        export const GridComponent = (props: TextFieldProps) => (
+          <Fragment>
+            Some text for this fragment
+          </Fragment>
+        );
+      "#,
+        /* Output */
+        r#"
+        export const GridComponent = (props: TextFieldProps) =>
+          <Fragment>
+            Some text for this fragment
+          </Fragment>;
+        "#
     );
 
     test_inline!(
@@ -354,31 +426,31 @@ mod test {
         "#,
         /* Output */
         r#"
-          <Row alignRight gap="50px" style={{ marginTop: "32px" }} className="file-name-row">
+          <Row className="file-name-row" alignRight gap="50px" style={{ marginTop: "32px" }}>
             <ModalOpener
+              className="file-name-modal-opener"
               Opener={({ onOpen }) =>
                 <PrimaryButton
+                  className="file-name-primary-button"
                   scale="big"
                   text={display.buttonText}
                   onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                     e.stopPropagation();
                     onOpen();
                   }}
-                  className="file-name-primary-button"
                 />
               }
               Modal={({ onClose }) =>
                 <ConfirmationDialog
+                  className="file-name-confirmation-dialog"
                   onCancel={onClose}
                   text={display.modalText}
                   onConfirm={async (event: any) => {
                     event.preventDefault();
                     await updateVendor();
                   }}
-                  className="file-name-confirmation-dialog"
                 />
               }
-              className="file-name-modal-opener"
             />
           </Row>
         "#
@@ -419,33 +491,33 @@ mod test {
         "#,
         /* Output */
         r#"
-          <Row alignRight gap="50px" style={{ marginTop: "32px" }} className="file-name-row">
+          <Row className="file-name-row" alignRight gap="50px" style={{ marginTop: "32px" }}>
             <ModalOpener
+              className="file-name-modal-opener"
               Opener={({ onOpen }) =>
                 <PrimaryButton
+                  className="file-name-primary-button"
                   scale="big"
                   text={display.buttonText}
                   onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                     e.stopPropagation();
                     onOpen();
                   }}
-                  className="file-name-primary-button"
                 />
               }
               Modal={({ onClose }) =>
                 <ConfirmationDialog
+                  className="file-name-confirmation-dialog"
                   onCancel={onClose}
                   text={display.modalText}
                   onConfirm={async (event: any) => {
                     event.preventDefault();
                     await updateVendor();
                   }}
-                  className="file-name-confirmation-dialog"
                 >
-                  <SubDialog className="no-print file-name-sub-dialog" />
+                  <SubDialog className="file-name-sub-dialog no-print" />
                 </ConfirmationDialog>
               }
-              className="file-name-modal-opener"
             />
           </Row>
         "#
@@ -489,22 +561,44 @@ mod test {
             }
 
             public render() {
-              return <Link to="/notifications" className="file-name-link">
+              return <Link className="file-name-link" to="/notifications">
                   <Route
+                    className="file-name-route"
                     path="/notifications"
                     children={route =>
                       <AlertWrapper className="file-name-alert-wrapper">
-                        <Icon icon={faBell} color={colors.white} className="file-name-icon"/>
+                        <Icon className="file-name-icon" icon={faBell} color={colors.white} />
                         {!!this.props.hasUnreadNotifications && !route.match &&
                           <AlertBubble className="file-name-alert-bubble"/>
                         }
                       </AlertWrapper>
                     }
-                    className="file-name-route"
                   />
                 </Link>;
             }
           }
+        "#
+    );
+
+    test_inline!(
+        SYNTAX,
+        runner,
+        /* Name */ existing_jsx_expr_classname,
+        /* Input */
+        r#"
+          export const LoginTextField = (props: TextFieldProps) => {
+          const dynamicClassName = getClassNames();
+
+            return <TextField className={dynamicClassName + " bleh"} />;
+          };
+        "#,
+        /* Output */
+        r#"
+          export const LoginTextField = (props: TextFieldProps) => {
+            const dynamicClassName = getClassNames();
+
+            return <TextField className={"file-name-text-field " + (dynamicClassName + " bleh")} />;
+          };
         "#
     );
 }

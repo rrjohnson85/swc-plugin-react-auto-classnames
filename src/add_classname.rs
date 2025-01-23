@@ -2,8 +2,7 @@ use std::path::Path;
 
 use swc_core::common::DUMMY_SP;
 use swc_core::ecma::ast::{
-    BlockStmtOrExpr, Expr, Ident, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXAttrValue,
-    JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, Stmt, Str,
+  BlockStmtOrExpr, Expr, Ident, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXAttrValue, JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, SpreadElement, Stmt, Str, Tpl, TplElement
 };
 use swc_core::ecma::atoms::js_word;
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
@@ -48,7 +47,16 @@ impl<'a> AddClassnameVisitor<'a> {
         }
         result
     }
+
+    fn debug(&self, label: &str, obj: &dyn std::fmt::Debug) {
+        if std::env::var("DEBUG").is_ok() {
+            println!("{}: {:?}", label, obj);
+        }
+    }
 }
+
+
+
 
 impl<'a> VisitMut for AddClassnameVisitor<'a> {
     /**
@@ -65,24 +73,69 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
             _ => return,
         };
 
-        if component_name.contains("Fragment") {
+        if component_name.contains("Fragment") || component_name.ends_with("Provider") {
             return;
         }
+
+        let mut spread_identifier = "".to_string();
+
+        n.attrs.iter().find(|attr| match attr {
+            JSXAttrOrSpread::SpreadElement(SpreadElement { dot3_token: _,  expr }) => {
+                // if expr is identifier and the sym is props
+                if let Expr::Ident(ident) = &**expr {
+                    // if the spread element is props, we don't need to add className
+                    self.debug("Found spread element:", expr);
+                    spread_identifier = ident.sym.to_string();
+                }
+                false
+            }
+            _ => false
+        });
 
         let class_name: String = self.class_name(&component_name);
 
         let has_class_name = n.attrs.iter_mut().any(|attr| match attr {
             JSXAttrOrSpread::JSXAttr(JSXAttr { name, value, .. }) => {
                 if let JSXAttrName::Ident(ident) = name {
-                    // If you find the className attribute, append to it
                     if ident.sym == js_word!("className") {
                         if let Some(JSXAttrValue::Lit(Lit::Str(existing_value))) = value {
+                            // className="some-class" should become className="class_name some-class"
+                            self.debug("Found className string: {:?}", existing_value);
+
                             let new_value = Lit::Str(Str {
                                 span: DUMMY_SP,
-                                value: format!("{} {}", existing_value.value, class_name).into(),
+                                value: format!("{} {}", class_name, existing_value.value).into(),
                                 raw: None,
                             });
                             *value = Some(JSXAttrValue::Lit(new_value));
+                        }
+                        if let Some(JSXAttrValue::JSXExprContainer(expr_container)) = value {
+                            if let JSXExpr::Expr(expr) = &mut expr_container.expr {
+                                if let Expr::Tpl(tpl) = &mut **expr {
+                                    // className={`some-${value}`} should become className={`class_name (some-${value})`}
+                                    self.debug("Found template literal: {:?}", tpl);
+
+                                    let start_quasi: &TplElement = tpl.quasis.first().unwrap();
+                                    let new_start_quasi: TplElement = TplElement {
+                                        span: DUMMY_SP,
+                                        tail: start_quasi.tail,
+                                        cooked: Option::Some(format!("{} {}", class_name, start_quasi.raw).into()),
+                                        raw: format!("{} {}",  class_name, start_quasi.raw).into(),
+                                    };
+                                    tpl.quasis.splice(0..1, vec![new_start_quasi].into_iter());
+                                }
+                                if let Expr::Bin(bin_expr) = &mut **expr {
+                                    // className={value + ' '} should become className={class_name + value + ' '}
+                                    self.debug("Found binary expression: {:?}", bin_expr);
+
+                                    bin_expr.right = Box::new(Expr::Bin(bin_expr.clone()));
+                                    bin_expr.left = Box::new(Expr::Lit(Lit::Str(Str {
+                                        span: DUMMY_SP,
+                                        value: format!("{} ", class_name).into(),
+                                        raw: None,
+                                    })));
+                                }
+                            }
                         }
                         return true;
                     }
@@ -99,15 +152,54 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
         });
 
         if !has_class_name {
-            n.attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
-                span: DUMMY_SP,
-                name: JSXAttrName::Ident(Ident::new(js_word!("className"), DUMMY_SP)),
-                value: Some(JSXAttrValue::Lit(Lit::Str(Str {
+            let attribute_name = JSXAttrName::Ident(Ident::new(js_word!("className"), DUMMY_SP));
+
+            if !spread_identifier.is_empty() {
+                // <Component {...props} /> should become <Component {...props} className={`class_name ${props.className}`} />
+                n.attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
                     span: DUMMY_SP,
-                    value: class_name.into(),
-                    raw: None,
-                }))),
-            }));
+                    name: attribute_name,
+                    value: Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
+                        span: DUMMY_SP,
+                        expr: JSXExpr::Expr(Box::new(Expr::Tpl(Tpl {
+                            span: DUMMY_SP,
+                            quasis: vec![
+                                TplElement {
+                                    span: DUMMY_SP,
+                                    tail: false,
+                                    cooked: Some(format!("{} ", class_name.clone()).into()),
+                                    raw: format!("{} ", class_name.clone()).into(),
+                                },
+                                TplElement {
+                                    span: DUMMY_SP,
+                                    tail: true,
+                                    cooked: Some("".into()),
+                                    raw: "".into()
+                                },
+                            ],
+                            exprs: vec![Box::new(Expr::Ident(Ident {
+                                span: DUMMY_SP,
+                                sym: format!("{}.className", spread_identifier).into(),
+                                optional: false,
+                            }))],
+                        })))
+                    }))
+                }));
+            } else {
+                // <Component otherProp="value" /> should become <Component className="class_name" otherProp="value" />
+                n.attrs.insert(
+                    0,
+                    JSXAttrOrSpread::JSXAttr(JSXAttr {
+                        span: DUMMY_SP,
+                        name: attribute_name,
+                        value: Some(JSXAttrValue::Lit(Lit::Str(Str {
+                            span: DUMMY_SP,
+                            value: class_name.into(),
+                            raw: None,
+                        })))
+                    })
+                );
+            }
         }
     }
 
