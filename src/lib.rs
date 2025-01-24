@@ -137,7 +137,7 @@ mod test {
                 style: { fontSize: "20px", ...props.InputProps?.style || {} },
                 ...props.InputProps || {},
               }}
-              className={`file-name-text-field ${props.className}`}
+              className={`file-name-text-field ${props?.className || ""}`}
             />;
         "#
     );
@@ -269,7 +269,7 @@ mod test {
                   ids.current ? ids.current.includes(node.data.id) : true
                 }
                 {...gridProps}
-                className={`file-name-ag-grid-react ${gridProps.className}`}
+                className={`file-name-ag-grid-react ${gridProps?.className || ""}`}
               />
             </div>
           </>;
@@ -310,7 +310,7 @@ mod test {
         /* Output */
         r#"
           export const TextFieldComponent = (props: TextFieldProps) =>
-            <TextField {...props} className={`file-name-text-field ${props.className}`} />;
+            <TextField {...props} className={`file-name-text-field ${props?.className || ""}`} />;
         "#
     );
 

@@ -2,9 +2,9 @@ use std::path::Path;
 
 use swc_core::common::{SyntaxContext, DUMMY_SP};
 use swc_core::ecma::ast::{
-    BlockStmtOrExpr, Expr, Ident, IdentName, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXAttrValue,
-    JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, SpreadElement, Stmt, Str,
-    Tpl, TplElement,
+    op, BinExpr, BlockStmtOrExpr, Expr, Ident, IdentName, JSXAttr, JSXAttrName, JSXAttrOrSpread,
+    JSXAttrValue, JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, MemberExpr,
+    MemberProp, OptChainBase, OptChainExpr, SpreadElement, Stmt, Str, Tpl, TplElement,
 };
 use swc_core::ecma::atoms::js_word;
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
@@ -162,7 +162,6 @@ impl VisitMut for AddClassnameVisitor<'_> {
             );
 
             if !spread_identifier.is_empty() {
-                // <Component {...props} /> should become <Component {...props} className={`class_name ${props.className}`} />
                 n.attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
                     span: DUMMY_SP,
                     name: attribute_name,
@@ -184,11 +183,36 @@ impl VisitMut for AddClassnameVisitor<'_> {
                                     raw: "".into(),
                                 },
                             ],
-                            exprs: vec![Box::new(Expr::Ident(Ident {
+                            exprs: vec![Box::new(Expr::Bin(BinExpr {
                                 span: DUMMY_SP,
-                                sym: format!("{}.className", spread_identifier).into(),
-                                optional: false,
-                                ctxt: SyntaxContext::empty(),
+                                op: op!("||"),
+                                left: Box::new(Expr::OptChain(OptChainExpr {
+                                    span: DUMMY_SP,
+                                    optional: true,
+                                    base: Box::new(OptChainBase::Member(MemberExpr {
+                                        span: DUMMY_SP,
+                                        obj: Box::new(Expr::Ident(Ident {
+                                            span: DUMMY_SP,
+                                            sym: spread_identifier.clone().into(),
+                                            optional: false,
+                                            ctxt: SyntaxContext::empty(),
+                                        })),
+                                        prop: MemberProp::Ident(
+                                            Ident {
+                                                span: DUMMY_SP,
+                                                sym: "className".into(),
+                                                optional: false,
+                                                ctxt: SyntaxContext::empty(),
+                                            }
+                                            .into(),
+                                        ),
+                                    })),
+                                })),
+                                right: Box::new(Expr::Lit(Lit::Str(Str {
+                                    span: DUMMY_SP,
+                                    value: "".into(),
+                                    raw: None,
+                                }))),
                             }))],
                         }))),
                     })),
