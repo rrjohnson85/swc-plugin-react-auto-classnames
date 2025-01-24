@@ -1,24 +1,24 @@
 {
     "name": "swc-plugin-react-auto-classnames",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "description": "SWC plugin to automatically add classnames to react components (filename and component name)",
     "author": "Eric Halvorsen <Viscousness@Gmail.com>",
     "license": "MIT",
     "keywords": ["swc-plugin"],
     "main": "swc_plugin_react_auto_classnames.wasm",
     "files": [
-        "target/wasm32-wasi/release/swc_plugin_react_auto_classnames.wasm"
+        "target/wasm32-wasip1/release/swc_plugin_react_auto_classnames.wasm"
     ],
     "preferUnplugged": true,
     "repository": "https://github.com/hjkcai/swc-plugin-add-display-name",
     "scripts": {
-        "prepublishOnly": "cargo build-wasi --release"
+        "prepack": "cargo build-wasi --release && cp target/wasm32-wasip1/release/swc_plugin_react_auto_classnames.wasm ."
     },
     "peerDependencies": {
-        "@swc/core": "^1.3.81"
+        "@swc/core": "~1.10.0"
     },
     "devDependencies": {
-        "@swc/cli": "^0.1.59",
-        "@swc/core": "^1.3.81"
+        "@swc/cli": "^0.6.0",
+        "@swc/core": "~1.10.0"
     }
 }

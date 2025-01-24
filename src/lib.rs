@@ -2,10 +2,7 @@ mod add_classname;
 
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
-    ecma::{
-        ast::Program,
-        visit::{as_folder, FoldWith},
-    },
+    ecma::{ast::Program, visit::visit_mut_pass},
     plugin::metadata::TransformPluginMetadataContextKind,
 };
 
@@ -13,25 +10,25 @@ use add_classname::AddClassnameVisitor;
 
 #[plugin_transform]
 pub fn process_transform(program: Program, data: TransformPluginProgramMetadata) -> Program {
-    let filepath = match data.get_context(&TransformPluginMetadataContextKind::Filename) {
-        Some(s) => s,
-        None => String::from(""),
-    };
-    program.fold_with(&mut as_folder(AddClassnameVisitor::new(&filepath)))
+    let filepath = data
+        .get_context(&TransformPluginMetadataContextKind::Filename)
+        .unwrap_or_default();
+    program.apply(&mut visit_mut_pass(AddClassnameVisitor::new(&filepath)))
 }
 
 #[cfg(test)]
 mod test {
-    use swc_core::common::{chain, Mark};
+    use swc_core::common::Mark;
+    use swc_core::ecma::ast::Pass;
     use swc_core::ecma::transforms::base::resolver;
     use swc_core::ecma::transforms::testing::Tester;
     use swc_core::ecma::{
-        parser::{Syntax, TsConfig},
+        parser::{Syntax, TsSyntax},
         transforms::testing::test_inline,
-        visit::{as_folder, Fold},
+        visit::visit_mut_pass,
     };
 
-    const SYNTAX: Syntax = Syntax::Typescript(TsConfig {
+    const SYNTAX: Syntax = Syntax::Typescript(TsSyntax {
         tsx: true,
         decorators: false,
         dts: false,
@@ -39,12 +36,12 @@ mod test {
         disallow_ambiguous_jsx_like: true,
     });
 
-    fn runner(_: &mut Tester) -> impl Fold {
+    fn runner(_: &mut Tester) -> impl Pass {
         std::env::set_var("DEBUG", "true");
 
-        chain!(
+        (
             resolver(Mark::new(), Mark::new(), false),
-            as_folder(super::AddClassnameVisitor::new("lib/File_Name.tsx"))
+            visit_mut_pass(super::AddClassnameVisitor::new("lib/File_Name.tsx")),
         )
     }
 
@@ -318,34 +315,34 @@ mod test {
     );
 
     test_inline!(
-      SYNTAX,
-      runner,
-      /* Name */ splat_props_explicit_classname,
-      /* Input */
-      r#"
+        SYNTAX,
+        runner,
+        /* Name */ splat_props_explicit_classname,
+        /* Input */
+        r#"
         export const TextFieldComponent = (props: TextFieldProps) => (
           <TextField {...props} className="no-print" />
         );
       "#,
-      /* Output */
-      r#"
+        /* Output */
+        r#"
         export const TextFieldComponent = (props: TextFieldProps) =>
           <TextField {...props} className="file-name-text-field no-print" />;
       "#
     );
 
     test_inline!(
-      SYNTAX,
-      runner,
-      /* Name */ splat_with_expr_classname,
-      /* Input */
-      r#"
+        SYNTAX,
+        runner,
+        /* Name */ splat_with_expr_classname,
+        /* Input */
+        r#"
         export const TextFieldComponent = (props: TextFieldProps) => (
           <TextField {...props} className={`complex-${value}`} />
         );
       "#,
-      /* Output */
-      r#"
+        /* Output */
+        r#"
         export const TextFieldComponent = (props: TextFieldProps) =>
           <TextField {...props} className={`file-name-text-field complex-${value}`} />;
       "#

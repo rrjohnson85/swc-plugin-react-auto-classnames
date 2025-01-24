@@ -1,8 +1,10 @@
 use std::path::Path;
 
-use swc_core::common::DUMMY_SP;
+use swc_core::common::{SyntaxContext, DUMMY_SP};
 use swc_core::ecma::ast::{
-  BlockStmtOrExpr, Expr, Ident, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXAttrValue, JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, SpreadElement, Stmt, Str, Tpl, TplElement
+    BlockStmtOrExpr, Expr, Ident, IdentName, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXAttrValue,
+    JSXElementName, JSXExpr, JSXExprContainer, JSXOpeningElement, Lit, SpreadElement, Stmt, Str,
+    Tpl, TplElement,
 };
 use swc_core::ecma::atoms::js_word;
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
@@ -55,10 +57,7 @@ impl<'a> AddClassnameVisitor<'a> {
     }
 }
 
-
-
-
-impl<'a> VisitMut for AddClassnameVisitor<'a> {
+impl VisitMut for AddClassnameVisitor<'_> {
     /**
      * The VisitMut trait is used to traverse the AST and modify it in place.
      * visit_mut_jsx_opening_element is called when the visitor encounters a tag in the JSX.
@@ -67,9 +66,10 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
     fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
         let component_name = match &n.name {
             JSXElementName::Ident(ident) => ident.sym.to_string(),
-            JSXElementName::JSXMemberExpr(expr) => match &expr.prop {
-                Ident { sym, .. } => sym.to_string(),
-            },
+            JSXElementName::JSXMemberExpr(expr) => {
+                let IdentName { sym, .. } = &expr.prop;
+                sym.to_string()
+            }
             _ => return,
         };
 
@@ -80,7 +80,10 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
         let mut spread_identifier = "".to_string();
 
         n.attrs.iter().find(|attr| match attr {
-            JSXAttrOrSpread::SpreadElement(SpreadElement { dot3_token: _,  expr }) => {
+            JSXAttrOrSpread::SpreadElement(SpreadElement {
+                dot3_token: _,
+                expr,
+            }) => {
                 // if expr is identifier and the sym is props
                 if let Expr::Ident(ident) = &**expr {
                     // if the spread element is props, we don't need to add className
@@ -89,7 +92,7 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
                 }
                 false
             }
-            _ => false
+            _ => false,
         });
 
         let class_name: String = self.class_name(&component_name);
@@ -119,10 +122,12 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
                                     let new_start_quasi: TplElement = TplElement {
                                         span: DUMMY_SP,
                                         tail: start_quasi.tail,
-                                        cooked: Option::Some(format!("{} {}", class_name, start_quasi.raw).into()),
-                                        raw: format!("{} {}",  class_name, start_quasi.raw).into(),
+                                        cooked: Option::Some(
+                                            format!("{} {}", class_name, start_quasi.raw).into(),
+                                        ),
+                                        raw: format!("{} {}", class_name, start_quasi.raw).into(),
                                     };
-                                    tpl.quasis.splice(0..1, vec![new_start_quasi].into_iter());
+                                    tpl.quasis.splice(0..1, vec![new_start_quasi]);
                                 }
                                 if let Expr::Bin(bin_expr) = &mut **expr {
                                     // className={value + ' '} should become className={class_name + value + ' '}
@@ -152,7 +157,9 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
         });
 
         if !has_class_name {
-            let attribute_name = JSXAttrName::Ident(Ident::new(js_word!("className"), DUMMY_SP));
+            let attribute_name = JSXAttrName::Ident(
+                Ident::new(js_word!("className"), DUMMY_SP, SyntaxContext::empty()).into(),
+            );
 
             if !spread_identifier.is_empty() {
                 // <Component {...props} /> should become <Component {...props} className={`class_name ${props.className}`} />
@@ -174,16 +181,17 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
                                     span: DUMMY_SP,
                                     tail: true,
                                     cooked: Some("".into()),
-                                    raw: "".into()
+                                    raw: "".into(),
                                 },
                             ],
                             exprs: vec![Box::new(Expr::Ident(Ident {
                                 span: DUMMY_SP,
                                 sym: format!("{}.className", spread_identifier).into(),
                                 optional: false,
+                                ctxt: SyntaxContext::empty(),
                             }))],
-                        })))
-                    }))
+                        }))),
+                    })),
                 }));
             } else {
                 // <Component otherProp="value" /> should become <Component className="class_name" otherProp="value" />
@@ -196,34 +204,32 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
                             span: DUMMY_SP,
                             value: class_name.into(),
                             raw: None,
-                        })))
-                    })
+                        }))),
+                    }),
                 );
             }
         }
     }
 
     fn visit_mut_jsx_expr_container(&mut self, expr_container: &mut JSXExprContainer) {
-        match &mut expr_container.expr {
-            JSXExpr::Expr(expr) => {
-                if let Expr::Arrow(arrow_expr) = &mut **expr {
-                    match &mut *arrow_expr.body {
-                        BlockStmtOrExpr::Expr(inner_expr) => {
-                            // Adjusted handling for boxed expressions.
-                            // Dereference the boxed expression to inspect it.
-                            if let Expr::JSXElement(element) = &mut **inner_expr {
-                                element.visit_mut_with(self);
-                            }
+        if let JSXExpr::Expr(expr) = &mut expr_container.expr {
+            if let Expr::Arrow(arrow_expr) = &mut **expr {
+                match &mut *arrow_expr.body {
+                    BlockStmtOrExpr::Expr(inner_expr) => {
+                        // Adjusted handling for boxed expressions.
+                        // Dereference the boxed expression to inspect it.
+                        if let Expr::JSXElement(element) = &mut **inner_expr {
+                            element.visit_mut_with(self);
                         }
-                        BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                            // Iterate over statements in block statement for return statements.
-                            for stmt in &mut block_stmt.stmts {
-                                if let Stmt::Return(return_stmt) = stmt {
-                                    if let Some(returned_expr) = &mut return_stmt.arg {
-                                        // Again, properly dereference the boxed expression to inspect it.
-                                        if let Expr::JSXElement(element) = &mut **returned_expr {
-                                            element.visit_mut_with(self);
-                                        }
+                    }
+                    BlockStmtOrExpr::BlockStmt(block_stmt) => {
+                        // Iterate over statements in block statement for return statements.
+                        for stmt in &mut block_stmt.stmts {
+                            if let Stmt::Return(return_stmt) = stmt {
+                                if let Some(returned_expr) = &mut return_stmt.arg {
+                                    // Again, properly dereference the boxed expression to inspect it.
+                                    if let Expr::JSXElement(element) = &mut **returned_expr {
+                                        element.visit_mut_with(self);
                                     }
                                 }
                             }
@@ -231,7 +237,6 @@ impl<'a> VisitMut for AddClassnameVisitor<'a> {
                     }
                 }
             }
-            _ => {}
         }
         expr_container.visit_mut_children_with(self);
     }

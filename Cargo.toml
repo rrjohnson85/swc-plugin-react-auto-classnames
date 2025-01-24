@@ -1,6 +1,6 @@
 [package]
 name = "swc-plugin-react-auto-classnames"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 
 [lib]
@@ -14,7 +14,7 @@ strip = "symbols"
 
 [dependencies]
 serde = "1"
-swc_core = { version = "0.88.*", features = ["ecma_plugin_transform", "ecma_parser"] }
+swc_core = { version = "10.7", features = ["ecma_plugin_transform", "ecma_parser"] }
 
 # .cargo/config defines few alias to build plugin.
 # cargo build-wasi generates wasm-wasi32 binary
